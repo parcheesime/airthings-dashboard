@@ -1,0 +1,16 @@
+{
+  "data": {
+    "time": 1778976825,
+    "battery": 100,
+    "co2": 404.0,
+    "humidity": 53.0,
+    "pm1": 9.0,
+    "pm25": 9.0,
+    "pressure": 1000.0,
+    "radonShortTermAvg": 18.0,
+    "relayDeviceType": "hub",
+    "rssi": 0,
+    "temp": 22.8,
+    "voc": 88.0
+  }
+}
