@@ -56,6 +56,23 @@ def get_devices(access_token):
     return response.json()
 
 
+def get_latest_samples(access_token, device_id):
+    """
+    Retrieve latest sensor values for one Airthings device
+    """
+
+    url = f"https://ext-api.airthings.com/v1/devices/{device_id}/latest-samples"
+
+    headers = {
+        "Authorization": f"Bearer {access_token}"
+    }
+
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+
+    return response.json()
+
+
 if __name__ == "__main__":
 
     print("Getting access token...")
