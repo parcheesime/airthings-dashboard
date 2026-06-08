@@ -19,6 +19,7 @@ def get_readings_df(limit=100):
                 "humidity": 1,
                 "co2": 1,
                 "voc": 1,
+                "pm1": 1,
                 "pm25": 1,
                 "radon_short_term_avg": 1,
                 },
@@ -28,10 +29,13 @@ def get_readings_df(limit=100):
         )
 
     df = pd.DataFrame(list(cursor))
+    df["recorded_at"] = pd.to_datetime(df["recorded_at"], utc=True)
+    df["pulled_at"] = pd.to_datetime(df["pulled_at"], utc=True)
+
+    df["recorded_at_local"] = df["recorded_at"].dt.tz_convert("America/Los_Angeles")
+    df["pulled_at_local"] = df["pulled_at"].dt.tz_convert("America/Los_Angeles")
     df = df.dropna(subset=["recorded_at"])
-    df = df.dropna(how="all", subset=["co2", "humidity", "pm25", "temp", "voc"])
-    df["recorded_at"] = pd.to_datetime(df["recorded_at"])
-    df["pulled_at"] = pd.to_datetime(df["pulled_at"])
+    df = df.dropna(how="all", subset=["co2", "humidity", "pm1", "pm25", "temp", "voc"])
     df["temp_f"] = (df["temp"] * 9 / 5) + 32
     df = df.sort_values("recorded_at")
 
