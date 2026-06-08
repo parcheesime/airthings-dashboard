@@ -40,7 +40,16 @@ document = {
     "raw": samples_response,
 }
 
-result = collection.insert_one(document)
+existing = collection.find_one(
+    {
+        "device_id": DEVICE_ID,
+        "recorded_at_unix": recorded_at_unix,
+    }
+)
 
-print("Inserted raw readings document ID:", result.inserted_id)
-print(document)
+if existing:
+    print("Reading already exists, skipping insert:", recorded_at)
+else:
+    result = collection.insert_one(document)
+    print("Inserted raw readings document ID:", result.inserted_id)
+    print(document)
