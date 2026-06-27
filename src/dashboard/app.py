@@ -1,4 +1,5 @@
 from pathlib import Path
+from html import escape
 import sys
 
 import pandas as pd
@@ -65,6 +66,57 @@ st.markdown(
         color: rgba(255, 255, 255, 0.55);
       }
 
+      .outdoor-summary {
+        padding: 1.25rem 0 1.35rem;
+      }
+
+      .outdoor-summary h3 {
+        font-size: 1.45rem;
+        font-weight: 700;
+        margin: 0 0 1.35rem;
+      }
+
+      .outdoor-station {
+        color: rgba(255, 255, 255, 0.72);
+        margin-bottom: 1.25rem;
+      }
+
+      .outdoor-section-label {
+        font-weight: 700;
+        margin: 1.25rem 0 0.5rem;
+      }
+
+      .outdoor-metric-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.1rem;
+      }
+
+      .outdoor-metric-label {
+        color: rgba(255, 255, 255, 0.72);
+        margin-bottom: 0.2rem;
+      }
+
+      .outdoor-metric-value {
+        font-weight: 700;
+      }
+
+      .outdoor-timing-label {
+        color: rgba(255, 255, 255, 0.72);
+        margin-top: 0.65rem;
+      }
+
+      .outdoor-timing-value {
+        padding-bottom: 0.5rem;
+      }
+
+      .outdoor-attribution {
+        color: rgba(255, 255, 255, 0.48);
+        font-size: 0.88rem;
+        margin-top: -0.25rem;
+      }
+
       @media (max-width: 900px) {
         .current-grid {
           grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -76,10 +128,10 @@ st.markdown(
 )
 
 st.title("🌬️ Airthings Air Quality Dashboard")
-st.caption("Live indoor air quality monitoring")
+st.caption("Live indoor air quality monitoring • College Area, San Diego")
 
 df = get_readings_df(limit=100)
-outdoor_df = get_outdoor_readings_df(limit=100)
+outdoor_df = get_outdoor_readings_df(limit=500)
 
 if not df.empty:
     df = df.sort_values("recorded_at_local")
@@ -119,7 +171,7 @@ if not df.empty:
         st.markdown(
             f"""
             <div class="current-panel">
-              <div class="current-title">Current Conditions <span>{overall_status}</span></div>
+              <div class="current-title">Current Indoor Conditions <span>{overall_status}</span></div>
               <div class="current-grid">
                 <div class="current-metric">
                   <div class="metric-label">🌬 VOC</div>
@@ -189,6 +241,7 @@ if not df.empty:
         )
 
         voc_fig.update_traces(
+            mode="lines",
             hovertemplate=(
                 "<b>Local Time</b>: %{customdata[0]}<br>"
                 "<b>UTC Time</b>: %{customdata[1]}<br>"
@@ -215,6 +268,7 @@ if not df.empty:
         )
 
         pm25_fig.update_traces(
+            mode="lines",
             hovertemplate=(
                 "<b>Local Time</b>: %{customdata[0]}<br>"
                 "<b>PM2.5</b>: %{y:.1f} µg/m³"
@@ -242,7 +296,10 @@ if not df.empty:
         outdoor_avg_pm25 = outdoor_last_30["pm25"].mean()
         outdoor_max_pm25 = outdoor_last_30["pm25"].max()
 
-        outdoor_chart_df = outdoor_df.copy()
+        outdoor_chart_df = outdoor_df[
+            outdoor_df["recorded_at_local"]
+            >= latest_outdoor_time - pd.Timedelta(hours=24)
+        ].copy()
         outdoor_chart_df["local_time"] = outdoor_chart_df[
             "recorded_at_local"
         ].dt.strftime("%Y-%m-%d %I:%M:%S %p")
@@ -252,43 +309,57 @@ if not df.empty:
 
         with sdsu_summary_col:
             with st.container(height=430, border=True):
-                st.subheader("SDSU Outdoor Summary")
-
+                station_markup = ""
                 if "station_name" in latest_outdoor and pd.notna(
                     latest_outdoor["station_name"]
                 ):
-                    st.markdown(latest_outdoor["station_name"])
-
-                st.markdown("**PM2.5**")
-                outdoor_avg_col, outdoor_peak_col = st.columns(2)
-                outdoor_avg_col.markdown("Average")
-                outdoor_avg_col.markdown(f"{outdoor_avg_pm25:.1f} µg/m³")
-                outdoor_peak_col.markdown("Peak")
-                outdoor_peak_col.markdown(f"{outdoor_max_pm25:.1f} µg/m³")
-
-                st.markdown("**Latest Reading**")
-                st.markdown(f"{latest_outdoor['pm25']:.1f} µg/m³")
-
-                st.markdown("**Timing**")
-                st.markdown("Last sensor reading")
-                st.markdown(
-                    latest_outdoor["recorded_at_local"].strftime(
-                        "%Y-%m-%d %I:%M:%S %p"
+                    station_markup = (
+                        f'<div class="outdoor-station">'
+                        f'{escape(str(latest_outdoor["station_name"]))}</div>'
                     )
-                )
 
+                pulled_markup = ""
                 if "pulled_at_local" in latest_outdoor and pd.notna(
                     latest_outdoor["pulled_at_local"]
                 ):
-                    st.markdown("Last data pull")
-                    st.markdown(
-                        latest_outdoor["pulled_at_local"].strftime(
-                            "%Y-%m-%d %I:%M:%S %p"
-                        )
+                    pulled_markup = (
+                        '<div class="outdoor-timing-label">Last data pull</div>'
+                        f'<div class="outdoor-timing-value">'
+                        f'{latest_outdoor["pulled_at_local"].strftime("%Y-%m-%d %I:%M:%S %p")}'
+                        '</div>'
                     )
 
+                st.markdown(
+                    f"""
+                    <div class="outdoor-summary">
+                      <h3>SDSU Outdoor Summary</h3>
+                      {station_markup}
+                      <div class="outdoor-section-label">PM2.5</div>
+                      <div class="outdoor-metric-grid">
+                        <div>
+                          <div class="outdoor-metric-label">Average</div>
+                          <div class="outdoor-metric-value">{outdoor_avg_pm25:.1f} µg/m³</div>
+                        </div>
+                        <div>
+                          <div class="outdoor-metric-label">Peak</div>
+                          <div class="outdoor-metric-value">{outdoor_max_pm25:.1f} µg/m³</div>
+                        </div>
+                      </div>
+                      <div class="outdoor-section-label">Latest Reading</div>
+                      <div class="outdoor-metric-value">{latest_outdoor['pm25']:.1f} µg/m³</div>
+                      <div class="outdoor-section-label">Timing</div>
+                      <div class="outdoor-timing-label">Last sensor reading</div>
+                      <div class="outdoor-timing-value">
+                        {latest_outdoor["recorded_at_local"].strftime("%Y-%m-%d %I:%M:%S %p")}
+                      </div>
+                      {pulled_markup}
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
         with sdsu_chart_col:
-            st.subheader("SDSU PM2.5 Over Time")
+            st.subheader("SDSU Outdoor PM2.5 (Last 24 Hours)")
 
             outdoor_pm25_fig = px.line(
                 outdoor_chart_df,
@@ -302,6 +373,8 @@ if not df.empty:
             )
 
             outdoor_pm25_fig.update_traces(
+                mode="lines+markers",
+                marker=dict(size=5),
                 hovertemplate=(
                     "<b>Local Time</b>: %{customdata[0]}<br>"
                     "<b>UTC Time</b>: %{customdata[1]}<br>"
@@ -311,8 +384,18 @@ if not df.empty:
                 customdata=outdoor_chart_df[["local_time", "utc_time"]],
             )
 
+            outdoor_pm25_fig.update_xaxes(
+                nticks=6,
+                tickformat="%b %-d<br>%-I %p",
+            )
             outdoor_pm25_fig.update_layout(height=330)
             st.plotly_chart(outdoor_pm25_fig, use_container_width=True)
+            st.markdown(
+                '<div class="outdoor-attribution">'
+                "Outdoor data provided by PurpleAir — SDSU Athletics (PA-II)"
+                "</div>",
+                unsafe_allow_html=True,
+            )
     else:
         with sdsu_summary_col:
             with st.container(height=430, border=True):
@@ -320,7 +403,7 @@ if not df.empty:
                 st.info("No outdoor readings found.")
 
         with sdsu_chart_col:
-            st.subheader("SDSU PM2.5 Over Time")
+            st.subheader("SDSU Outdoor PM2.5 (Last 24 Hours)")
             st.info("No outdoor readings found.")
 
     with st.expander("Raw Data"):
