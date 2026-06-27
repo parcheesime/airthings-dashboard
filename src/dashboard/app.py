@@ -66,49 +66,64 @@ st.markdown(
         color: rgba(255, 255, 255, 0.55);
       }
 
-      .outdoor-summary {
-        padding: 1.25rem 0 1.35rem;
+      .summary-card {
+        padding: 1.25rem 0 1.5rem;
       }
 
-      .outdoor-summary h3 {
+      .summary-card h3 {
         font-size: 1.45rem;
         font-weight: 700;
-        margin: 0 0 1.35rem;
+        margin: 0 0 1.4rem;
       }
 
-      .outdoor-station {
-        color: rgba(255, 255, 255, 0.72);
-        margin-bottom: 1.25rem;
+      .summary-section {
+        margin-top: 1.35rem;
       }
 
-      .outdoor-section-label {
+      .summary-section:first-of-type {
+        margin-top: 0;
+      }
+
+      .summary-label {
         font-weight: 700;
-        margin: 1.25rem 0 0.5rem;
+        margin-bottom: 0.45rem;
       }
 
-      .outdoor-metric-grid {
+      .summary-grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 1rem;
-        margin-bottom: 1.1rem;
       }
 
-      .outdoor-metric-label {
+      .summary-subtle {
         color: rgba(255, 255, 255, 0.72);
         margin-bottom: 0.2rem;
       }
 
-      .outdoor-metric-value {
+      .summary-value {
         font-weight: 700;
       }
 
-      .outdoor-timing-label {
-        color: rgba(255, 255, 255, 0.72);
-        margin-top: 0.65rem;
+      .summary-final {
+        padding-bottom: 0.35rem;
       }
 
-      .outdoor-timing-value {
-        padding-bottom: 0.5rem;
+      .indoor-summary-card {
+        min-height: 850px;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .indoor-summary-card .summary-section {
+        margin-top: 3rem;
+      }
+
+      .indoor-summary-card .summary-section:first-of-type {
+        margin-top: 0;
+      }
+
+      .indoor-summary-card .summary-final {
+        margin-top: auto;
       }
 
       .outdoor-attribution {
@@ -126,6 +141,24 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+
+def format_summary_time(timestamp):
+    local_timestamp = pd.Timestamp(timestamp)
+    today = pd.Timestamp.now(tz=local_timestamp.tz).date()
+
+    if local_timestamp.date() == today:
+        return local_timestamp.strftime("%-I:%M %p")
+
+    return local_timestamp.strftime("%b %-d • %-I:%M %p")
+
+
+def format_station_name(station_name):
+    if pd.isna(station_name):
+        return ""
+
+    return escape(str(station_name).replace(" (PA-II)", ""))
+
 
 st.title("🌬️ Airthings Air Quality Dashboard")
 st.caption("Live indoor air quality monitoring • College Area, San Diego")
@@ -204,27 +237,48 @@ if not df.empty:
 
     with left_col:
         with st.container(height=850, border=True):
-            st.subheader("30 Minute Summary")
-
-            st.markdown("**VOC**")
-            voc_avg_col, voc_peak_col = st.columns(2)
-            voc_avg_col.markdown("Average")
-            voc_avg_col.markdown(f"{avg_voc:.0f} ppb")
-            voc_peak_col.markdown("Peak")
-            voc_peak_col.markdown(f"{max_voc:.0f} ppb")
-
-            st.markdown("**PM2.5**")
-            pm25_avg_col, pm25_peak_col = st.columns(2)
-            pm25_avg_col.markdown("Average")
-            pm25_avg_col.markdown(f"{avg_pm25:.1f} µg/m³")
-            pm25_peak_col.markdown("Peak")
-            pm25_peak_col.markdown(f"{max_pm25:.1f} µg/m³")
-
-            st.markdown("**Timing**")
-            st.markdown("Last sensor reading")
-            st.markdown(latest["recorded_at_local"].strftime("%Y-%m-%d %I:%M:%S %p"))
-            st.markdown("Last data pull")
-            st.markdown(latest["pulled_at_local"].strftime("%Y-%m-%d %I:%M:%S %p"))
+            st.markdown(
+                f"""
+                <div class="summary-card indoor-summary-card">
+                  <h3>30 Minute Summary</h3>
+                  <div class="summary-section">
+                    <div class="summary-label">Status</div>
+                    <div class="summary-value">{overall_status}</div>
+                  </div>
+                  <div class="summary-section">
+                    <div class="summary-label">VOC</div>
+                    <div class="summary-grid">
+                      <div>
+                        <div class="summary-subtle">Average</div>
+                        <div class="summary-value">{avg_voc:.0f} ppb</div>
+                      </div>
+                      <div>
+                        <div class="summary-subtle">Peak</div>
+                        <div class="summary-value">{max_voc:.0f} ppb</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="summary-section">
+                    <div class="summary-label">PM2.5</div>
+                    <div class="summary-grid">
+                      <div>
+                        <div class="summary-subtle">Average</div>
+                        <div class="summary-value">{avg_pm25:.1f} µg/m³</div>
+                      </div>
+                      <div>
+                        <div class="summary-subtle">Peak</div>
+                        <div class="summary-value">{max_pm25:.1f} µg/m³</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="summary-section summary-final">
+                    <div class="summary-label">Last Updated</div>
+                    <div class="summary-value">{format_summary_time(latest["recorded_at_local"])}</div>
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
     with right_col:
         st.subheader("VOC Over Time")
@@ -308,51 +362,48 @@ if not df.empty:
         )
 
         with sdsu_summary_col:
-            with st.container(height=430, border=True):
-                station_markup = ""
+            with st.container(border=True):
+                station_name = "SDSU Athletics"
                 if "station_name" in latest_outdoor and pd.notna(
                     latest_outdoor["station_name"]
                 ):
-                    station_markup = (
-                        f'<div class="outdoor-station">'
-                        f'{escape(str(latest_outdoor["station_name"]))}</div>'
-                    )
+                    station_name = format_station_name(latest_outdoor["station_name"])
 
-                pulled_markup = ""
-                if "pulled_at_local" in latest_outdoor and pd.notna(
-                    latest_outdoor["pulled_at_local"]
+                temperature = "Unavailable"
+                if "temperature_f" in latest_outdoor and pd.notna(
+                    latest_outdoor["temperature_f"]
                 ):
-                    pulled_markup = (
-                        '<div class="outdoor-timing-label">Last data pull</div>'
-                        f'<div class="outdoor-timing-value">'
-                        f'{latest_outdoor["pulled_at_local"].strftime("%Y-%m-%d %I:%M:%S %p")}'
-                        '</div>'
-                    )
+                    temperature = f'{latest_outdoor["temperature_f"]:.0f}°F'
 
                 st.markdown(
                     f"""
-                    <div class="outdoor-summary">
+                    <div class="summary-card">
                       <h3>SDSU Outdoor Summary</h3>
-                      {station_markup}
-                      <div class="outdoor-section-label">PM2.5</div>
-                      <div class="outdoor-metric-grid">
-                        <div>
-                          <div class="outdoor-metric-label">Average</div>
-                          <div class="outdoor-metric-value">{outdoor_avg_pm25:.1f} µg/m³</div>
-                        </div>
-                        <div>
-                          <div class="outdoor-metric-label">Peak</div>
-                          <div class="outdoor-metric-value">{outdoor_max_pm25:.1f} µg/m³</div>
+                      <div class="summary-section">
+                        <div class="summary-label">Station</div>
+                        <div class="summary-value">{station_name}</div>
+                      </div>
+                      <div class="summary-section">
+                        <div class="summary-label">PM2.5</div>
+                        <div class="summary-grid">
+                          <div>
+                            <div class="summary-subtle">Average</div>
+                            <div class="summary-value">{outdoor_avg_pm25:.1f} µg/m³</div>
+                          </div>
+                          <div>
+                            <div class="summary-subtle">Peak</div>
+                            <div class="summary-value">{outdoor_max_pm25:.1f} µg/m³</div>
+                          </div>
                         </div>
                       </div>
-                      <div class="outdoor-section-label">Latest Reading</div>
-                      <div class="outdoor-metric-value">{latest_outdoor['pm25']:.1f} µg/m³</div>
-                      <div class="outdoor-section-label">Timing</div>
-                      <div class="outdoor-timing-label">Last sensor reading</div>
-                      <div class="outdoor-timing-value">
-                        {latest_outdoor["recorded_at_local"].strftime("%Y-%m-%d %I:%M:%S %p")}
+                      <div class="summary-section">
+                        <div class="summary-label">Temperature</div>
+                        <div class="summary-value">{temperature}</div>
                       </div>
-                      {pulled_markup}
+                      <div class="summary-section summary-final">
+                        <div class="summary-label">Last Updated</div>
+                        <div class="summary-value">{format_summary_time(latest_outdoor["recorded_at_local"])}</div>
+                      </div>
                     </div>
                     """,
                     unsafe_allow_html=True,
@@ -398,7 +449,7 @@ if not df.empty:
             )
     else:
         with sdsu_summary_col:
-            with st.container(height=430, border=True):
+            with st.container(border=True):
                 st.subheader("SDSU Outdoor Summary")
                 st.info("No outdoor readings found.")
 
