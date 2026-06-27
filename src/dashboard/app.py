@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT))
 
 from src.processing.read_raw_readings import get_readings_df
+from src.processing.read_outdoor_readings import get_outdoor_readings_df
 
 
 st.set_page_config(
@@ -78,6 +79,7 @@ st.title("🌬️ Airthings Air Quality Dashboard")
 st.caption("Live indoor air quality monitoring")
 
 df = get_readings_df(limit=100)
+outdoor_df = get_outdoor_readings_df(limit=100)
 
 if not df.empty:
     df = df.sort_values("recorded_at_local")
@@ -228,13 +230,98 @@ if not df.empty:
 
     sdsu_summary_col, sdsu_chart_col = st.columns([1, 2.4], gap="large")
 
-    with sdsu_summary_col:
-        st.subheader("SDSU Outdoor Summary")
-        st.info("SDSU outdoor summary placeholder")
+    if not outdoor_df.empty:
+        outdoor_df = outdoor_df.sort_values("recorded_at_local")
+        latest_outdoor = outdoor_df.iloc[-1]
+        latest_outdoor_time = latest_outdoor["recorded_at_local"]
+        outdoor_last_30 = outdoor_df[
+            outdoor_df["recorded_at_local"]
+            >= latest_outdoor_time - pd.Timedelta(minutes=30)
+        ]
 
-    with sdsu_chart_col:
-        st.subheader("SDSU PM2.5 Over Time")
-        st.info("SDSU PM2.5 chart placeholder")
+        outdoor_avg_pm25 = outdoor_last_30["pm25"].mean()
+        outdoor_max_pm25 = outdoor_last_30["pm25"].max()
+
+        outdoor_chart_df = outdoor_df.copy()
+        outdoor_chart_df["local_time"] = outdoor_chart_df[
+            "recorded_at_local"
+        ].dt.strftime("%Y-%m-%d %I:%M:%S %p")
+        outdoor_chart_df["utc_time"] = outdoor_chart_df["recorded_at"].dt.strftime(
+            "%Y-%m-%d %H:%M:%S UTC"
+        )
+
+        with sdsu_summary_col:
+            with st.container(height=430, border=True):
+                st.subheader("SDSU Outdoor Summary")
+
+                if "station_name" in latest_outdoor and pd.notna(
+                    latest_outdoor["station_name"]
+                ):
+                    st.markdown(latest_outdoor["station_name"])
+
+                st.markdown("**PM2.5**")
+                outdoor_avg_col, outdoor_peak_col = st.columns(2)
+                outdoor_avg_col.markdown("Average")
+                outdoor_avg_col.markdown(f"{outdoor_avg_pm25:.1f} µg/m³")
+                outdoor_peak_col.markdown("Peak")
+                outdoor_peak_col.markdown(f"{outdoor_max_pm25:.1f} µg/m³")
+
+                st.markdown("**Latest Reading**")
+                st.markdown(f"{latest_outdoor['pm25']:.1f} µg/m³")
+
+                st.markdown("**Timing**")
+                st.markdown("Last sensor reading")
+                st.markdown(
+                    latest_outdoor["recorded_at_local"].strftime(
+                        "%Y-%m-%d %I:%M:%S %p"
+                    )
+                )
+
+                if "pulled_at_local" in latest_outdoor and pd.notna(
+                    latest_outdoor["pulled_at_local"]
+                ):
+                    st.markdown("Last data pull")
+                    st.markdown(
+                        latest_outdoor["pulled_at_local"].strftime(
+                            "%Y-%m-%d %I:%M:%S %p"
+                        )
+                    )
+
+        with sdsu_chart_col:
+            st.subheader("SDSU PM2.5 Over Time")
+
+            outdoor_pm25_fig = px.line(
+                outdoor_chart_df,
+                x="recorded_at_local",
+                y="pm25",
+                markers=True,
+                labels={
+                    "recorded_at_local": "Local Time",
+                    "pm25": "PM2.5 (µg/m³)",
+                },
+            )
+
+            outdoor_pm25_fig.update_traces(
+                hovertemplate=(
+                    "<b>Local Time</b>: %{customdata[0]}<br>"
+                    "<b>UTC Time</b>: %{customdata[1]}<br>"
+                    "<b>PM2.5</b>: %{y:.1f} µg/m³"
+                    "<extra></extra>"
+                ),
+                customdata=outdoor_chart_df[["local_time", "utc_time"]],
+            )
+
+            outdoor_pm25_fig.update_layout(height=330)
+            st.plotly_chart(outdoor_pm25_fig, use_container_width=True)
+    else:
+        with sdsu_summary_col:
+            with st.container(height=430, border=True):
+                st.subheader("SDSU Outdoor Summary")
+                st.info("No outdoor readings found.")
+
+        with sdsu_chart_col:
+            st.subheader("SDSU PM2.5 Over Time")
+            st.info("No outdoor readings found.")
 
     with st.expander("Raw Data"):
         st.dataframe(df)
