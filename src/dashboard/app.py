@@ -17,6 +17,63 @@ st.set_page_config(
     layout="wide",
 )
 
+st.markdown(
+    """
+    <style>
+      .current-panel {
+        padding: 1.25rem 1.5rem 1.35rem;
+      }
+
+      .current-title {
+        text-align: center;
+        font-size: 1.45rem;
+        font-weight: 700;
+        margin-bottom: 1.35rem;
+      }
+
+      .current-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 1rem;
+        align-items: center;
+      }
+
+      .current-metric {
+        text-align: center;
+        white-space: nowrap;
+      }
+
+      .metric-label {
+        font-weight: 700;
+        font-size: 0.95rem;
+        margin-bottom: 0.35rem;
+      }
+
+      .metric-value {
+        font-size: 1rem;
+        color: rgba(255, 255, 255, 0.75);
+      }
+
+      .metric-value strong {
+        color: white;
+        font-size: 1.08rem;
+        font-weight: 800;
+      }
+
+      .metric-value span {
+        color: rgba(255, 255, 255, 0.55);
+      }
+
+      @media (max-width: 900px) {
+        .current-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 st.title("🌬️ Airthings Air Quality Dashboard")
 st.caption("Live indoor air quality monitoring")
 
@@ -30,29 +87,6 @@ if not df.empty:
     voc = latest["voc"]
     pm1 = latest["pm1"]
     pm25 = latest["pm25"]
-
-    # --- Status helpers ---
-    def get_pm_status(value):
-        if value < 5:
-            return "🟢 Excellent"
-        elif value < 12:
-            return "🟢 Good"
-        elif value < 35:
-            return "🟡 Moderate"
-        elif value < 55:
-            return "🟠 Unhealthy"
-        return "🔴 Hazardous"
-
-    def get_voc_status(value):
-        if value < 250:
-            return "🟢 Good"
-        elif value < 500:
-            return "🟡 Fair"
-        return "🔴 Poor"
-
-    voc_status = get_voc_status(voc)
-    pm1_status = get_pm_status(pm1)
-    pm25_status = get_pm_status(pm25)
 
     # --- Last 30 minute summary ---
     latest_time = latest["recorded_at_local"]
@@ -78,45 +112,65 @@ if not df.empty:
         "%Y-%m-%d %H:%M:%S UTC"
     )
 
-    # --- Main layout ---
+    # --- Current conditions ---
+    with st.container(border=True):
+        st.markdown(
+            f"""
+            <div class="current-panel">
+              <div class="current-title">Current Conditions <span>{overall_status}</span></div>
+              <div class="current-grid">
+                <div class="current-metric">
+                  <div class="metric-label">🌬 VOC</div>
+                  <div class="metric-value"><strong>{voc:.0f}</strong> <span>ppb</span></div>
+                </div>
+                <div class="current-metric">
+                  <div class="metric-label">✨ PM2.5</div>
+                  <div class="metric-value"><strong>{pm25:.1f}</strong> <span>µg/m³</span></div>
+                </div>
+                <div class="current-metric">
+                  <div class="metric-label">✨ PM1</div>
+                  <div class="metric-value"><strong>{pm1:.1f}</strong> <span>µg/m³</span></div>
+                </div>
+                <div class="current-metric">
+                  <div class="metric-label">🌡 Temp</div>
+                  <div class="metric-value"><strong>{latest['temp_f']:.1f}</strong> <span>°F</span></div>
+                </div>
+                <div class="current-metric">
+                  <div class="metric-label">💧 Humidity</div>
+                  <div class="metric-value"><strong>{latest['humidity']:.0f}</strong> <span>%</span></div>
+                </div>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # --- Indoor layout ---
     left_col, right_col = st.columns([1, 2.4], gap="large")
 
     with left_col:
-        st.subheader("30 Minute Summary")
+        with st.container(height=850, border=True):
+            st.subheader("30 Minute Summary")
 
-        st.markdown(
-            f"""
-            ### {overall_status}
+            st.markdown("**VOC**")
+            voc_avg_col, voc_peak_col = st.columns(2)
+            voc_avg_col.markdown("Average")
+            voc_avg_col.markdown(f"{avg_voc:.0f} ppb")
+            voc_peak_col.markdown("Peak")
+            voc_peak_col.markdown(f"{max_voc:.0f} ppb")
 
-            **VOC average:** {avg_voc:.0f} ppb  
-            **VOC peak:** {max_voc:.0f} ppb  
+            st.markdown("**PM2.5**")
+            pm25_avg_col, pm25_peak_col = st.columns(2)
+            pm25_avg_col.markdown("Average")
+            pm25_avg_col.markdown(f"{avg_pm25:.1f} µg/m³")
+            pm25_peak_col.markdown("Peak")
+            pm25_peak_col.markdown(f"{max_pm25:.1f} µg/m³")
 
-            **PM2.5 average:** {avg_pm25:.1f} µg/m³  
-            **PM2.5 peak:** {max_pm25:.1f} µg/m³  
-
-            **Last sensor reading:**  
-            {latest['recorded_at_local'].strftime('%Y-%m-%d %I:%M:%S %p')}
-
-            **Last data pull:**  
-            {latest['pulled_at_local'].strftime('%Y-%m-%d %I:%M:%S %p')}
-            """
-        )
-
-        st.divider()
-
-        st.subheader("Current Status")
-
-        st.metric("VOC", f"{voc:.0f} ppb")
-        st.caption(voc_status)
-
-        st.metric("PM2.5", f"{pm25:.1f} µg/m³")
-        st.caption(pm25_status)
-
-        st.metric("PM1", f"{pm1:.1f} µg/m³")
-        st.caption(pm1_status)
-
-        st.metric("Temp", f"{latest['temp_f']:.1f} °F")
-        st.metric("Humidity", f"{latest['humidity']:.0f}%")
+            st.markdown("**Timing**")
+            st.markdown("Last sensor reading")
+            st.markdown(latest["recorded_at_local"].strftime("%Y-%m-%d %I:%M:%S %p"))
+            st.markdown("Last data pull")
+            st.markdown(latest["pulled_at_local"].strftime("%Y-%m-%d %I:%M:%S %p"))
 
     with right_col:
         st.subheader("VOC Over Time")
@@ -169,6 +223,18 @@ if not df.empty:
 
         pm25_fig.update_layout(height=330)
         st.plotly_chart(pm25_fig, use_container_width=True)
+
+    st.divider()
+
+    sdsu_summary_col, sdsu_chart_col = st.columns([1, 2.4], gap="large")
+
+    with sdsu_summary_col:
+        st.subheader("SDSU Outdoor Summary")
+        st.info("SDSU outdoor summary placeholder")
+
+    with sdsu_chart_col:
+        st.subheader("SDSU PM2.5 Over Time")
+        st.info("SDSU PM2.5 chart placeholder")
 
     with st.expander("Raw Data"):
         st.dataframe(df)
