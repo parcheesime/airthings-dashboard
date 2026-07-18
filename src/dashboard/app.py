@@ -153,11 +153,45 @@ def format_summary_time(timestamp):
     return local_timestamp.strftime("%b %-d • %-I:%M %p")
 
 
-def format_station_name(station_name):
-    if pd.isna(station_name):
-        return ""
+def format_outdoor_value(value, suffix="", decimals=0):
+    numeric_value = pd.to_numeric(value, errors="coerce")
+    if pd.isna(numeric_value):
+        return "Unavailable"
 
-    return escape(str(station_name).replace(" (PA-II)", ""))
+    return f"{numeric_value:.{decimals}f}{suffix}"
+
+
+def get_aqi_status(aqi):
+    numeric_aqi = pd.to_numeric(aqi, errors="coerce")
+    if pd.isna(numeric_aqi):
+        return "Unavailable"
+    if numeric_aqi <= 50:
+        return "🟢 Good"
+    if numeric_aqi <= 100:
+        return "🟡 Moderate"
+    if numeric_aqi <= 150:
+        return "🟠 Unhealthy for Sensitive Groups"
+    if numeric_aqi <= 200:
+        return "🔴 Unhealthy"
+    if numeric_aqi <= 300:
+        return "🟣 Very Unhealthy"
+    return "🟤 Hazardous"
+
+
+def format_pollutant(code):
+    if pd.isna(code) or not str(code).strip():
+        return "Unavailable"
+
+    pollutant_names = {
+        "p2": "PM2.5",
+        "p1": "PM10",
+        "o3": "Ozone",
+        "n2": "Nitrogen Dioxide",
+        "s2": "Sulfur Dioxide",
+        "co": "Carbon Monoxide",
+    }
+    normalized_code = str(code).strip().lower()
+    return escape(pollutant_names.get(normalized_code, str(code)))
 
 
 st.title("🌬️ Airthings Air Quality Dashboard")
@@ -336,19 +370,26 @@ if not df.empty:
 
     st.divider()
 
-    sdsu_summary_col, sdsu_chart_col = st.columns([1, 2.4], gap="large")
+    outdoor_summary_col, outdoor_chart_col = st.columns([1, 2.4], gap="large")
+
+    if "provider" in outdoor_df.columns:
+        outdoor_df = outdoor_df[
+            outdoor_df["provider"].astype("string").str.lower() == "iqair"
+        ].copy()
+    else:
+        outdoor_df = outdoor_df.iloc[0:0].copy()
 
     if not outdoor_df.empty:
+        if "aqi_us" not in outdoor_df.columns:
+            outdoor_df["aqi_us"] = float("nan")
+        else:
+            outdoor_df["aqi_us"] = pd.to_numeric(
+                outdoor_df["aqi_us"], errors="coerce"
+            )
+
         outdoor_df = outdoor_df.sort_values("recorded_at_local")
         latest_outdoor = outdoor_df.iloc[-1]
         latest_outdoor_time = latest_outdoor["recorded_at_local"]
-        outdoor_last_30 = outdoor_df[
-            outdoor_df["recorded_at_local"]
-            >= latest_outdoor_time - pd.Timedelta(minutes=30)
-        ]
-
-        outdoor_avg_pm25 = outdoor_last_30["pm25"].mean()
-        outdoor_max_pm25 = outdoor_last_30["pm25"].max()
 
         outdoor_chart_df = outdoor_df[
             outdoor_df["recorded_at_local"]
@@ -361,44 +402,65 @@ if not df.empty:
             "%Y-%m-%d %H:%M:%S UTC"
         )
 
-        with sdsu_summary_col:
+        location_name = latest_outdoor.get("location_name")
+        state = latest_outdoor.get("state")
+        if pd.isna(location_name) or pd.isna(state):
+            reporting_area = "Unavailable"
+        else:
+            reporting_area = f"{escape(str(location_name))}, {escape(str(state))}"
+
+        current_aqi = latest_outdoor.get("aqi_us")
+        aqi_display = format_outdoor_value(current_aqi)
+        aqi_status = get_aqi_status(current_aqi)
+        pollutant = format_pollutant(latest_outdoor.get("main_pollutant"))
+
+        temperature_c = pd.to_numeric(
+            latest_outdoor.get("temperature_c"), errors="coerce"
+        )
+        temperature = "Unavailable"
+        if pd.notna(temperature_c):
+            temperature = format_outdoor_value(
+                temperature_c * 9 / 5 + 32, suffix="°F"
+            )
+
+        humidity = format_outdoor_value(
+            latest_outdoor.get("humidity"), suffix="%"
+        )
+
+        with outdoor_summary_col:
             with st.container(border=True):
-                station_name = "SDSU Athletics"
-                if "station_name" in latest_outdoor and pd.notna(
-                    latest_outdoor["station_name"]
-                ):
-                    station_name = format_station_name(latest_outdoor["station_name"])
-
-                temperature = "Unavailable"
-                if "temperature_f" in latest_outdoor and pd.notna(
-                    latest_outdoor["temperature_f"]
-                ):
-                    temperature = f'{latest_outdoor["temperature_f"]:.0f}°F'
-
                 st.markdown(
                     f"""
                     <div class="summary-card">
-                      <h3>SDSU Outdoor Summary</h3>
+                      <h3>Local Outdoor Summary</h3>
                       <div class="summary-section">
-                        <div class="summary-label">Station</div>
-                        <div class="summary-value">{station_name}</div>
+                        <div class="summary-label">Reporting Area</div>
+                        <div class="summary-value">{reporting_area}</div>
                       </div>
                       <div class="summary-section">
-                        <div class="summary-label">PM2.5</div>
+                        <div class="summary-label">Current AQI</div>
                         <div class="summary-grid">
                           <div>
-                            <div class="summary-subtle">Average</div>
-                            <div class="summary-value">{outdoor_avg_pm25:.1f} µg/m³</div>
+                            <div class="summary-subtle">US AQI</div>
+                            <div class="summary-value">{aqi_display}</div>
                           </div>
                           <div>
-                            <div class="summary-subtle">Peak</div>
-                            <div class="summary-value">{outdoor_max_pm25:.1f} µg/m³</div>
+                            <div class="summary-subtle">Status</div>
+                            <div class="summary-value">{aqi_status}</div>
                           </div>
                         </div>
                       </div>
                       <div class="summary-section">
+                        <div class="summary-label">Main Pollutant</div>
+                        <div class="summary-value">{pollutant}</div>
+                      </div>
+                      <div class="summary-section">
                         <div class="summary-label">Temperature</div>
                         <div class="summary-value">{temperature}</div>
+                      </div>
+                      <div class="summary-section">
+                        <div class="summary-label">Humidity</div>
+                        <div class="summary-value">{humidity}</div>
                       </div>
                       <div class="summary-section summary-final">
                         <div class="summary-label">Last Updated</div>
@@ -409,52 +471,52 @@ if not df.empty:
                     unsafe_allow_html=True,
                 )
 
-        with sdsu_chart_col:
-            st.subheader("SDSU Outdoor PM2.5 (Last 24 Hours)")
+        with outdoor_chart_col:
+            st.subheader("Local Outdoor AQI (Last 24 Hours)")
 
-            outdoor_pm25_fig = px.line(
+            outdoor_aqi_fig = px.line(
                 outdoor_chart_df,
                 x="recorded_at_local",
-                y="pm25",
+                y="aqi_us",
                 markers=True,
                 labels={
                     "recorded_at_local": "Local Time",
-                    "pm25": "PM2.5 (µg/m³)",
+                    "aqi_us": "US AQI",
                 },
             )
 
-            outdoor_pm25_fig.update_traces(
+            outdoor_aqi_fig.update_traces(
                 mode="lines+markers",
                 marker=dict(size=5),
                 hovertemplate=(
                     "<b>Local Time</b>: %{customdata[0]}<br>"
                     "<b>UTC Time</b>: %{customdata[1]}<br>"
-                    "<b>PM2.5</b>: %{y:.1f} µg/m³"
+                    "<b>US AQI</b>: %{y:.0f}"
                     "<extra></extra>"
                 ),
                 customdata=outdoor_chart_df[["local_time", "utc_time"]],
             )
 
-            outdoor_pm25_fig.update_xaxes(
+            outdoor_aqi_fig.update_xaxes(
                 nticks=6,
                 tickformat="%b %-d<br>%-I %p",
             )
-            outdoor_pm25_fig.update_layout(height=330)
-            st.plotly_chart(outdoor_pm25_fig, use_container_width=True)
+            outdoor_aqi_fig.update_layout(height=330)
+            st.plotly_chart(outdoor_aqi_fig, use_container_width=True)
             st.markdown(
                 '<div class="outdoor-attribution">'
-                "Outdoor data provided by PurpleAir — SDSU Athletics (PA-II)"
+                "Outdoor air quality data provided by the IQAir Community API."
                 "</div>",
                 unsafe_allow_html=True,
             )
     else:
-        with sdsu_summary_col:
+        with outdoor_summary_col:
             with st.container(border=True):
-                st.subheader("SDSU Outdoor Summary")
+                st.subheader("Local Outdoor Summary")
                 st.info("No outdoor readings found.")
 
-        with sdsu_chart_col:
-            st.subheader("SDSU Outdoor PM2.5 (Last 24 Hours)")
+        with outdoor_chart_col:
+            st.subheader("Local Outdoor AQI (Last 24 Hours)")
             st.info("No outdoor readings found.")
 
     with st.expander("Raw Data"):
