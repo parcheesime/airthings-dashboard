@@ -197,10 +197,10 @@ def format_pollutant(code):
 st.title("🌬️ Airthings Air Quality Dashboard")
 st.caption("Indoor and outdoor air quality monitoring • College Area, San Diego")
 
-st.info(
-    "Data collection is temporarily paused during power outages/server maintenance. "
-    "Historical air quality data remains available below."
-)
+# st.info(
+#     "Data collection is temporarily paused during power outages/server maintenance. "
+#     "Historical air quality data remains available below."
+# )
 
 df = get_readings_df(limit=100)
 outdoor_df = get_outdoor_readings_df(limit=500)
